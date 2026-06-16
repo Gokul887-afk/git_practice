@@ -1,4 +1,10 @@
+Updated upstream
 This file is A
 New line added to a.txt
 Commit 1 change
 EXoeriment change 1
+merged: main and other versions
+a change 1
+amend practice
+Work in progress - multiplier feature
+Stashed changes
