@@ -1,7 +1,7 @@
 #!usr/bin/env bash
 
-NAME - "Gokul"
+NAME = "Gokul"
 
 echo Hello $NAME
-FILES = 'ls'
-echo $FILES
+FILES = $(ls)
+echo "$FILES"
