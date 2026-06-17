@@ -1,0 +1,20 @@
+name: Hello CI
+
+on:
+  push:
+
+jobs:
+  hello-job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Print Hello Message
+        run: |
+          echo "Hello from CI!"
+          echo "Current Date:"
+          date
+          echo "Commit Hash:"
+          echo "${{ github.sha }}"
