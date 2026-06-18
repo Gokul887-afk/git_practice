@@ -1,0 +1,48 @@
+name: Code Quality
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install tools
+        run: |
+          pip install pycodestyle
+
+      - name: Run code quality checks
+        run: |
+          python scripts/check_quality.py
+
+      - name: Run pycodestyle
+        run: |
+          pycodestyle . > pycodestyle_report.txt || true
+
+      - name: Post PR Comment
+        if: github.event_name == 'pull_request'
+        run: |
+          BODY=$(cat pycodestyle_report.txt)
+
+          if [ -z "$BODY" ]; then
+            BODY="No pycodestyle violations found."
+          fi
+
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            -d "{\"body\":\"## PEP8 Report\n\`\`\`\n$BODY\n\`\`\`\"}"
