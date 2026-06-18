@@ -1,0 +1,106 @@
+name: PR Review Summary
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+jobs:
+  review-summary:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create PR summary comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          MARKER="<!-- automated-pr-review-summary -->"
+
+          git fetch origin "$BASE_SHA"
+          git fetch origin "$HEAD_SHA"
+
+          FILES_CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | wc -l)
+          ADDED=$(git diff --numstat "$BASE_SHA" "$HEAD_SHA" | awk '{a+=$1} END {print a+0}')
+          REMOVED=$(git diff --numstat "$BASE_SHA" "$HEAD_SHA" | awk '{d+=$2} END {print d+0}')
+
+          git diff --stat "$BASE_SHA" "$HEAD_SHA" > diff_stat.txt
+
+          echo "### Diff statistics" > table.txt
+          echo "" >> table.txt
+          echo "| File | Added | Removed |" >> table.txt
+          echo "|------|-------|---------|" >> table.txt
+
+          git diff --numstat "$BASE_SHA" "$HEAD_SHA" | while read -r add del file
+          do
+            echo "| $file | $add | $del |" >> table.txt
+          done
+
+          echo "### TODO/FIXME comments" > todos.txt
+          echo "" >> todos.txt
+
+          FOUND=0
+          for file in $(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          do
+            if [ -f "$file" ]; then
+              MATCHES=$(grep -nE "TODO|FIXME" "$file" || true)
+              if [ -n "$MATCHES" ]; then
+                FOUND=1
+                echo "**$file**" >> todos.txt
+                echo '```' >> todos.txt
+                echo "$MATCHES" >> todos.txt
+                echo '```' >> todos.txt
+              fi
+            fi
+          done
+
+          if [ "$FOUND" -eq 0 ]; then
+            echo "No TODO or FIXME comments found." >> todos.txt
+          fi
+
+          {
+            echo "$MARKER"
+            echo "## Automated PR Review Summary"
+            echo ""
+            echo "**Files changed:** $FILES_CHANGED"
+            echo "**Lines added:** $ADDED"
+            echo "**Lines removed:** $REMOVED"
+            echo ""
+            cat table.txt
+            echo ""
+            cat todos.txt
+            echo ""
+            echo "### Raw git diff --stat"
+            echo '```'
+            cat diff_stat.txt
+            echo '```'
+          } > comment.md
+
+          EXISTING_COMMENT_ID=$(gh api \
+            repos/$REPO/issues/$PR_NUMBER/comments \
+            --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" \
+            | head -1)
+
+          if [ -n "$EXISTING_COMMENT_ID" ]; then
+            gh api \
+              --method PATCH \
+              repos/$REPO/issues/comments/$EXISTING_COMMENT_ID \
+              -f body="$(cat comment.md)"
+          else
+            gh api \
+              --method POST \
+              repos/$REPO/issues/$PR_NUMBER/comments \
+              -f body="$(cat comment.md)"
+          fi
